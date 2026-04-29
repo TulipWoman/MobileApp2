@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "536602310136",
+    "project_id": "mylocations-f6420",
+    "storage_bucket": "mylocations-f6420.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:536602310136:android:9ddd1d725fd7fb0cf3920d",
+        "android_client_info": {
+          "package_name": "com.example.mylocation"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDRlMoB8-pX6KFkOqDARzlkPMwlLLGhIXM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
