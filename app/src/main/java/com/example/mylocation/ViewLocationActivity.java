@@ -18,13 +18,13 @@ public class ViewLocationActivity extends AppCompatActivity {
     private StoredLocation loc;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {//retrieves intent from other screen
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_view_location);
 
         String id         = getIntent().getStringExtra("id");
         String collection = getIntent().getStringExtra("collection");
-        if (collection == null) collection = "locations";
+        if (collection == null) collection = "locations";//default to this location
 
         boolean isShared = "sharedLocations".equals(collection);
 
@@ -38,7 +38,7 @@ public class ViewLocationActivity extends AppCompatActivity {
                 });
     }
 
-    private void showDetails(boolean isShared) {
+    private void showDetails(boolean isShared) {//adds the details to tasklist
         TextView title       = findViewById(R.id.titleText);
         TextView description = findViewById(R.id.descriptionText);
         TextView dateText    = findViewById(R.id.dateText);
@@ -77,7 +77,7 @@ public class ViewLocationActivity extends AppCompatActivity {
         }
     }
 
-    private void editLocation() {
+    private void editLocation() { // loops back to the details again
         Intent intent = new Intent(this, AddLocationActivity.class);
         intent.putExtra("id", loc.id);
         intent.putExtra("lat", loc.latitude);
@@ -85,7 +85,7 @@ public class ViewLocationActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    private void deleteLocation() {
+    private void deleteLocation() {//deletes task(document) from external database closes screen
         FirebaseFirestore.getInstance()
                 .collection("locations")
                 .document(loc.id)
@@ -93,7 +93,7 @@ public class ViewLocationActivity extends AppCompatActivity {
                 .addOnSuccessListener(a -> finish());
     }
 
-    private void shareLocationToFirestore() {
+    private void shareLocationToFirestore() { //confirmation
         new android.app.AlertDialog.Builder(this)
                 .setTitle("Share Location")
                 .setMessage("Share \"" + loc.locationName + "\" with all users?")

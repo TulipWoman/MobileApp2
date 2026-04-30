@@ -53,20 +53,20 @@ public class MyLocation extends AppCompatActivity {
     ActivityResultLauncher<String[]> locationPermissionRequest;
     NotificationManagerCompat notificationManager;
 
-    long  minimumTimeBetweenUpdates     = 10000;
+    long  minimumTimeBetweenUpdates     = 10000;//GPS Throttling update times
     float minimumDistanceBetweenUpdates = 0.5f;
 
     LocationListener locationListener;
     LocationManager  locationManager;
-    FirebaseFirestore db;
+    FirebaseFirestore db;//calling cloud database
 
-    // Class-level so onPause can remove them (fixes Bug #2)
+    // onPause can remove
     ListenerRegistration locationsRegistration;
     ListenerRegistration sharedRegistration;
 
-    @SuppressLint("MissingPermission")
+    @SuppressLint("MissingPermission")//supresses run time permission check
     public void updateLocation() {
-        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);//refetches system
         if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
@@ -79,29 +79,29 @@ public class MyLocation extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        Configuration.getInstance().setUserAgentValue(getPackageName());
+        super.onCreate(savedInstanceState);//class setup
+        Configuration.getInstance().setUserAgentValue(getPackageName());//tile setting
         setContentView(R.layout.activity_my_location);
-        db = FirebaseFirestore.getInstance();
+        db = FirebaseFirestore.getInstance();//gets a reference to Firestore database
 
         notificationManager = NotificationManagerCompat.from(getApplicationContext());
-        createNotificationChannel();
+        createNotificationChannel(); //creates the notification channel needed to display notifications
 
         // Map setup
         mapView = findViewById(R.id.map);
-        mapView.setTileSource(TileSourceFactory.MAPNIK);
-        mapView.setMultiTouchControls(true);
+        mapView.setTileSource(TileSourceFactory.MAPNIK);//configures map tiles
+        mapView.setMultiTouchControls(true);//enables zoom
         MapController mapController = (MapController) mapView.getController();
         mapController.setZoom(15);
-        mapController.setCenter(new GeoPoint(52.268, -2.150));
+        mapController.setCenter(new GeoPoint(52.268, -2.150));//coordinates for worcestershire
 
-        // Task List button — navigate to the list screen
+        // Task List button attaches a click listener that navigates to TaskListActivity
         Button taskListButton = findViewById(R.id.taskListButton);
         taskListButton.setOnClickListener(v ->
                 startActivity(new Intent(this, TaskListActivity.class))
         );
 
-        // Long-press on map opens AddLocationActivity with lat/lon
+        // Long-press on map opens AddLocationActivity
         MapEventsOverlay mapEventsOverlay = new MapEventsOverlay(new MapEventsReceiver() {
             @Override public boolean singleTapConfirmedHelper(GeoPoint p) { return false; }
 
@@ -121,11 +121,12 @@ public class MyLocation extends AppCompatActivity {
         locationListener = new LocationListener() {
             boolean firstFix = true;
 
+            //GPS
             @Override
             public void onLocationChanged(@NonNull Location location) {
                 GeoPoint current = new GeoPoint(location.getLatitude(), location.getLongitude());
 
-                // Move or create the "you are here" marker
+                // Move or create the "you are here" marker to where user is
                 if (currentLocationMarker == null) {
                     currentLocationMarker = new Marker(mapView);
                     currentLocationMarker.setTitle("You are here");
@@ -140,13 +141,13 @@ public class MyLocation extends AppCompatActivity {
                     firstFix = false;
                 }
 
-                mapView.invalidate();
+                mapView.invalidate(); // map moves to where the user is
                 for (StoredLocation storedLoc : storedLocations.values()) {
                     GeoPoint target   = new GeoPoint(storedLoc.latitude, storedLoc.longitude);
                     double   distance = current.distanceToAsDouble(target);
                     if (distance < triggerDistance) {
                         Toast.makeText(getApplicationContext(),
-                                "You are " + (int) distance + " m from " + storedLoc.locationName,
+                                "You are " + (int) distance + " m from " + storedLoc.locationName, //notifications
                                 Toast.LENGTH_LONG).show();
                         if (!activeNotifications.contains(storedLoc.id) && storedLoc.notificationsRequired) {
                             notificationManager.notify(
@@ -161,11 +162,11 @@ public class MyLocation extends AppCompatActivity {
             }
         };
 
-        locationPermissionRequest = registerForActivityResult(
+        locationPermissionRequest = registerForActivityResult(//permission to access location
                 new ActivityResultContracts.RequestMultiplePermissions(),
                 result -> {
                     if (Boolean.TRUE.equals(result.get(Manifest.permission.ACCESS_FINE_LOCATION))) {
-                        updateLocation();
+                        updateLocation(); //GPS update
                     }
                 }
         );
@@ -177,10 +178,10 @@ public class MyLocation extends AppCompatActivity {
 
         // Only prompt for permissions if not already granted; otherwise start location updates directly
         boolean hasFine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;//checks permissions
         boolean hasNotif = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        if (!hasFine || !hasNotif) {
+        if (!hasFine || !hasNotif) {//if permission yes skips to update
             locationPermissionRequest.launch(new String[]{
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.POST_NOTIFICATIONS,
@@ -190,7 +191,7 @@ public class MyLocation extends AppCompatActivity {
             updateLocation();
         }
 
-        mapView.onResume();
+        mapView.onResume(); //map tile load
 
         // Assign to class fields so onPause can remove them
         locationsRegistration = FirebaseFirestore.getInstance()
@@ -218,15 +219,15 @@ public class MyLocation extends AppCompatActivity {
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
+    protected void onPause() { //opposite of resume
+        super.onPause();//stops gps updates and pauses map
         if (locationManager       != null) locationManager.removeUpdates(locationListener);
         if (locationsRegistration != null) locationsRegistration.remove();
         if (sharedRegistration    != null) sharedRegistration.remove();
         mapView.onPause();
     }
 
-    private void drawAllMarkers() {
+    private void drawAllMarkers() {//removes markers bar user position full refresh
         mapView.getOverlays().removeIf(o -> o instanceof Marker && o != currentLocationMarker);
         for (StoredLocation loc : storedLocations.values()) addMarker(loc, "locations");
         mapView.invalidate();
@@ -251,7 +252,7 @@ public class MyLocation extends AppCompatActivity {
         startActivity(intent);
     }
 
-    private void createNotificationChannel() {
+    private void createNotificationChannel() {//register notification
         NotificationChannel ch = new NotificationChannel(
                 NOTIFICATION_KEY, "MyLocationChannel",
                 android.app.NotificationManager.IMPORTANCE_DEFAULT);
@@ -259,7 +260,7 @@ public class MyLocation extends AppCompatActivity {
         getSystemService(android.app.NotificationManager.class).createNotificationChannel(ch);
     }
 
-    private Notification createNotification(StoredLocation loc, double distance) {
+    private Notification createNotification(StoredLocation loc, double distance) {//build location name and distance
         PendingIntent pi = PendingIntent.getActivity(this, loc.id.hashCode(),
                 new Intent(this, MyLocation.class).putExtra(NOTIFICATION_KEY, loc.locationName),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -271,7 +272,7 @@ public class MyLocation extends AppCompatActivity {
     }
 
     @Override
-    protected void onNewIntent(Intent intent) {
+    protected void onNewIntent(Intent intent) {//new input from the notification
         super.onNewIntent(intent);
         String name = intent.getStringExtra(NOTIFICATION_KEY);
         for (StoredLocation loc : storedLocations.values()) {
@@ -283,7 +284,7 @@ public class MyLocation extends AppCompatActivity {
         activeNotifications.remove(loc.id);
         new android.app.AlertDialog.Builder(this)
                 .setTitle(loc.locationName)
-                .setMessage("You are close. Keep receiving notifications here?")
+                .setMessage("You are close. Keep receiving notifications here?")//intial notification popup
                 .setPositiveButton("Yes", (d, i) -> {
                     loc.notificationsRequired = true;
                     db.collection("locations").document(loc.id).set(loc);

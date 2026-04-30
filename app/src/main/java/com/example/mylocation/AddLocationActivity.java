@@ -28,7 +28,7 @@ public class AddLocationActivity extends AppCompatActivity {
 
     private Uri imageUri;   // class variable
 
-    @Override
+    @Override//creating new tasks and editing existing ones
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
@@ -113,11 +113,11 @@ public class AddLocationActivity extends AppCompatActivity {
         saveButton.setOnClickListener(v -> saveLocation());
     }
 
-    private void saveLocation() {
+    private void saveLocation() {//collects values
 
         // Detect edit mode
         String editId = getIntent().getStringExtra("id");
-        boolean isEdit = editId != null;
+        boolean isEdit = editId != null;//turns empty values to null
 
         // Get lat/lon
         double lat = getIntent().getDoubleExtra("lat", 0);
@@ -153,7 +153,7 @@ public class AddLocationActivity extends AppCompatActivity {
                 .addOnSuccessListener(a -> finish());
     }
 
-    private void showDatePicker() {
+    private void showDatePicker() {//app 1
         Log.d("AddLocationActivity", "showDatePicker");
 
         java.util.Calendar cal = java.util.Calendar.getInstance();
@@ -173,7 +173,7 @@ public class AddLocationActivity extends AppCompatActivity {
         new DatePickerDialog(this, listener, year, month, day).show();
     }
 
-    private void showTimePicker() {
+    private void showTimePicker() {//app 1
         Log.d("AddLocationActivity", "showTimePicker");
 
         java.util.Calendar cal = java.util.Calendar.getInstance();

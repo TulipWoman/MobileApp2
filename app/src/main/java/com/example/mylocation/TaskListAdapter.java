@@ -11,9 +11,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.List;
 
 public class TaskListAdapter extends RecyclerView.Adapter<TaskListAdapter.TaskViewHolder> {
-
+//controls how each app los and works
     public interface OnTaskClickListener {
-        void onTaskClick(StoredLocation loc);
+        void onTaskClick(StoredLocation loc);//defined so adapter can work?
     }
 
     public interface OnTaskLongClickListener {
@@ -24,7 +24,7 @@ public class TaskListAdapter extends RecyclerView.Adapter<TaskListAdapter.TaskVi
     private final OnTaskClickListener     listener;
     private final OnTaskLongClickListener longClickListener;
 
-    public TaskListAdapter(List<StoredLocation> tasks,
+    public TaskListAdapter(List<StoredLocation> tasks,//sets title
                            OnTaskClickListener listener,
                            OnTaskLongClickListener longClickListener) {
         this.tasks             = tasks;
@@ -33,14 +33,14 @@ public class TaskListAdapter extends RecyclerView.Adapter<TaskListAdapter.TaskVi
     }
 
     @NonNull
-    @Override
+    @Override//inflates xml layout file
     public TaskViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.item_task, parent, false);
         return new TaskViewHolder(view);
     }
 
-    @Override
+    @Override//called by recycler view for rows
     public void onBindViewHolder(@NonNull TaskViewHolder holder, int position) {
         StoredLocation loc = tasks.get(position);
         holder.bind(loc, listener, longClickListener);

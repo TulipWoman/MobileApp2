@@ -13,7 +13,7 @@
       android:layout_width="match_parent"
       android:layout_height="match_parent"/>
 
-  <!-- Floating button — bottom-right corner, above the map -->
+  <!-- Floating button bottom right corner -->
   <Button
       android:id="@+id/taskListButton"
       android:text="Task List"

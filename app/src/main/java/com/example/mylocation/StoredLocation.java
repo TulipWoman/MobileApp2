@@ -19,7 +19,7 @@ public class StoredLocation implements Serializable {
 
     public StoredLocation() {
     }
-
+// single task throughout the app
     public StoredLocation(String id, String locationName, String description,
                           String imageUri, double latitude, double longitude) {
         this.id = id;
@@ -29,7 +29,7 @@ public class StoredLocation implements Serializable {
         this.latitude = latitude;
         this.longitude = longitude;
         this.notificationActive = false;
-        this.notificationsRequired = true;
+        this.notificationsRequired = true;//all strings firestore need
     }
 
     // Keep the short constructor too:

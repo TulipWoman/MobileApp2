@@ -19,9 +19,9 @@ import com.google.firebase.firestore.QueryDocumentSnapshot;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TaskListActivity extends AppCompatActivity {
+public class TaskListActivity extends AppCompatActivity { //personal and shared lists
 
-    private RecyclerView myTasksRecycler;
+    private RecyclerView myTasksRecycler; //two views vertically stacked
     private RecyclerView sharedTasksRecycler;
 
     private TaskListAdapter myTasksAdapter;
@@ -36,9 +36,9 @@ public class TaskListActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_task_list);
+        setContentView(R.layout.activity_task_list);//sets linear
 
-        // --- My Tasks RecyclerView ---
+        //My Tasks RecyclerView
         myTasksRecycler = findViewById(R.id.myTasksRecycler);
         myTasksRecycler.setLayoutManager(new LinearLayoutManager(this));
         myTasksAdapter = new TaskListAdapter(myTasks,
@@ -46,7 +46,7 @@ public class TaskListActivity extends AppCompatActivity {
                 loc -> confirmSaveLocation(loc));
         myTasksRecycler.setAdapter(myTasksAdapter);
 
-        // --- Shared Tasks RecyclerView ---
+        //Shared Tasks RecyclerView
         sharedTasksRecycler = findViewById(R.id.sharedTasksRecycler);
         sharedTasksRecycler.setLayoutManager(new LinearLayoutManager(this));
         sharedTasksAdapter = new TaskListAdapter(sharedTasks,
@@ -54,16 +54,16 @@ public class TaskListActivity extends AppCompatActivity {
                 loc -> Toast.makeText(this, "Cannot edit shared tasks", Toast.LENGTH_SHORT).show());
         sharedTasksRecycler.setAdapter(sharedTasksAdapter);
 
-        // --- Add Task button ---
+        //task button
         Button addTaskButton = findViewById(R.id.addTaskButton);
         addTaskButton.setOnClickListener(v -> promptAddTaskWithLocation());
     }
 
     @Override
-    protected void onResume() {
+    protected void onResume() {//populates filestore
         super.onResume();
 
-        // Listen to personal tasks
+        // Takes data to personal tasks
         myTasksRegistration = FirebaseFirestore.getInstance()
                 .collection("locations")
                 .addSnapshotListener((value, error) -> {
@@ -72,10 +72,10 @@ public class TaskListActivity extends AppCompatActivity {
                     for (QueryDocumentSnapshot doc : value) {
                         myTasks.add(doc.toObject(StoredLocation.class));
                     }
-                    myTasksAdapter.notifyDataSetChanged();
+                    myTasksAdapter.notifyDataSetChanged(); //refreshes whole list
                 });
 
-        // Listen to shared tasks
+        // Takes data to shared tasks
         sharedTasksRegistration = FirebaseFirestore.getInstance()
                 .collection("sharedLocations")
                 .addSnapshotListener((value, error) -> {
@@ -102,11 +102,11 @@ public class TaskListActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    /** Dialog shown when the user long-holds a task row — saves current GPS location to that task. */
+
     @SuppressLint("MissingPermission")
     private void confirmSaveLocation(StoredLocation loc) {
         new android.app.AlertDialog.Builder(this)
-                .setTitle("Save location to task?")
+                .setTitle("Save location to task?")//gps confirm dialogue
                 .setMessage("Attach your current GPS location to \"" + loc.locationName + "\"?")
                 .setPositiveButton("Save", (d, i) -> {
                     LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
@@ -134,13 +134,13 @@ public class TaskListActivity extends AppCompatActivity {
 
     /** Dialog shown when the user taps "+ Add Task" — offers to attach current location. */
     @SuppressLint("MissingPermission")
-    private void promptAddTaskWithLocation() {
+    private void promptAddTaskWithLocation() {//shows add button pressed
         new android.app.AlertDialog.Builder(this)
                 .setTitle("Add Task")
                 .setMessage("Attach your current location to the new task?")
                 .setPositiveButton("Yes, use my location", (d, i) -> {
                     LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
-                    Location gps = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                    Location gps = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);//fill coords
                     Location net = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
                     Location last = gps != null ? gps : net;
                     Intent intent = new Intent(this, AddLocationActivity.class);
