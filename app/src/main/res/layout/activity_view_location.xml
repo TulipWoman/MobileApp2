@@ -23,6 +23,25 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"/>
 
+        <!-- Date and time — hidden until set -->
+        <TextView
+            android:id="@+id/dateText"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/timeText"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:visibility="gone"/>
+
         <ImageView
             android:id="@+id/imageView"
             android:layout_width="250dp"

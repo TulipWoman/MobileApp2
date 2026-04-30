@@ -11,7 +11,6 @@ import org.osmdroid.views.overlay.Marker;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.app.AlertDialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.PendingIntent;
@@ -19,10 +18,9 @@ import android.content.Intent;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
-import android.widget.EditText;
+import android.widget.Button;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -34,18 +32,15 @@ import androidx.core.app.NotificationManagerCompat;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
-import com.google.firebase.firestore.CollectionReference;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
-import com.google.firebase.firestore.WriteBatch;
 
 public class MyLocation extends AppCompatActivity {
 
-    static final String NOTIFICATION_KEY = "MyLocation";
-    static final int NOTIFICATION_INTENT_CODE = 0;
+    static final String NOTIFICATION_KEY         = "MyLocation";
+    static final int    NOTIFICATION_INTENT_CODE = 0;
 
     Map<String, StoredLocation> storedLocations = new HashMap<>();
     double triggerDistance = 100;
@@ -54,20 +49,20 @@ public class MyLocation extends AppCompatActivity {
     ActivityResultLauncher<String[]> locationPermissionRequest;
     NotificationManagerCompat notificationManager;
 
-    long minimumTimeBetweenUpdates = 10000;
+    long  minimumTimeBetweenUpdates     = 10000;
     float minimumDistanceBetweenUpdates = 0.5f;
 
     LocationListener locationListener;
-    LocationManager locationManager;
+    LocationManager  locationManager;
     FirebaseFirestore db;
-    ListenerRegistration listenerRegistration;
 
-    Uri imageUri;
+    // Class-level so onPause can remove them (fixes Bug #2)
+    ListenerRegistration locationsRegistration;
+    ListenerRegistration sharedRegistration;
 
     @SuppressLint("MissingPermission")
     public void updateLocation() {
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-
         if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
@@ -80,57 +75,35 @@ public class MyLocation extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         super.onCreate(savedInstanceState);
         Configuration.getInstance().setUserAgentValue(getPackageName());
         setContentView(R.layout.activity_my_location);
         db = FirebaseFirestore.getInstance();
 
-        double lat = getIntent().getDoubleExtra("lat", 0);
-        double lon = getIntent().getDoubleExtra("lon", 0);
-
         notificationManager = NotificationManagerCompat.from(getApplicationContext());
         createNotificationChannel();
 
+        // Map setup
         mapView = findViewById(R.id.map);
         mapView.setTileSource(TileSourceFactory.MAPNIK);
         mapView.setMultiTouchControls(true);
-
         MapController mapController = (MapController) mapView.getController();
         mapController.setZoom(15);
-        GeoPoint myPoint = new GeoPoint(52.268, -2.150);
-        mapController.setCenter(myPoint);
+        mapController.setCenter(new GeoPoint(52.268, -2.150));
 
-        StoredLocation location1 = new StoredLocation("Ombersley", 52.27113, -2.2289);
-        StoredLocation location2 = new StoredLocation("City Campus", 52.1958, -2.2261);
-        StoredLocation location3 = new StoredLocation("Beer", 50.69713, -3.10145);
+        // Task List button — navigate to the list screen
+        Button taskListButton = findViewById(R.id.taskListButton);
+        taskListButton.setOnClickListener(v ->
+                startActivity(new Intent(this, TaskListActivity.class))
+        );
 
-        CollectionReference collection = db.collection("locations");
-        db.collection("sharedLocations");
-
-//        WriteBatch batch = db.batch();
-//        batch.set(collection.document(location1.locationName), location1);
-//        batch.set(collection.document(location2.locationName), location2);
-//        batch.set(collection.document(location3.locationName), location3);
-//
-//        batch.commit()
-//                .addOnSuccessListener(aVoid -> Log.d("MyLocation", "Successfully stored locations to Firebase"))
-//                .addOnFailureListener(e -> Log.d("MyLocation", "Failed to store to Firebase"));
-
-        storedLocations.put(location1.locationName, location1);
-        storedLocations.put(location2.locationName, location2);
-        storedLocations.put(location3.locationName, location3);
-
+        // Long-press on map opens AddLocationActivity with lat/lon
         MapEventsOverlay mapEventsOverlay = new MapEventsOverlay(new MapEventsReceiver() {
-            @Override
-            public boolean singleTapConfirmedHelper(GeoPoint p) {
-                Log.d("MyLocation", "Tap at " + p.toString());
-                return false;
-            }
+            @Override public boolean singleTapConfirmedHelper(GeoPoint p) { return false; }
 
             @Override
             public boolean longPressHelper(GeoPoint p) {
-                Log.d("MyLocation", "Press at " + p.toString());
+                Log.d("MyLocation", "Long press at " + p);
                 Intent intent = new Intent(MyLocation.this, AddLocationActivity.class);
                 intent.putExtra("lat", p.getLatitude());
                 intent.putExtra("lon", p.getLongitude());
@@ -138,73 +111,47 @@ public class MyLocation extends AppCompatActivity {
                 return true;
             }
         });
-
         mapView.getOverlays().add(mapEventsOverlay);
 
+        // Location listener
         locationListener = new LocationListener() {
-
             @Override
             public void onLocationChanged(@NonNull Location location) {
-
-                GeoPoint currentLocation = new GeoPoint(
-                        location.getLatitude(),
-                        location.getLongitude()
-                );
-
-                for (StoredLocation storedLocation : storedLocations.values()) {
-
-                    GeoPoint geoPoint = new GeoPoint(
-                            storedLocation.latitude,
-                            storedLocation.longitude
-                    );
-
-                    double distance = currentLocation.distanceToAsDouble(geoPoint);
-
+                GeoPoint current = new GeoPoint(location.getLatitude(), location.getLongitude());
+                for (StoredLocation storedLoc : storedLocations.values()) {
+                    GeoPoint target   = new GeoPoint(storedLoc.latitude, storedLoc.longitude);
+                    double   distance = current.distanceToAsDouble(target);
                     if (distance < triggerDistance) {
-
-                        Toast.makeText(
-                                getApplicationContext(),
-                                "You are " + distance + " metres from " + storedLocation.locationName,
-                                Toast.LENGTH_LONG
-                        ).show();
-
-                        if (!storedLocation.notificationActive && storedLocation.notificationsRequired) {
-
-                            int notificationID = storedLocation.locationName.hashCode();
-
-                            Notification notification = createNotification(storedLocation, distance);
-
-                            notificationManager.notify(notificationID, notification);
-
-                            storedLocation.notificationActive = true;
+                        Toast.makeText(getApplicationContext(),
+                                "You are " + (int) distance + " m from " + storedLoc.locationName,
+                                Toast.LENGTH_LONG).show();
+                        if (!storedLoc.notificationActive && storedLoc.notificationsRequired) {
+                            notificationManager.notify(
+                                    storedLoc.locationName.hashCode(),
+                                    createNotification(storedLoc, distance));
+                            storedLoc.notificationActive = true;
                         }
                     } else {
-                        storedLocation.notificationActive = false;
+                        storedLoc.notificationActive = false;
                     }
                 }
             }
         };
 
-        locationPermissionRequest =
-                registerForActivityResult(
-                        new ActivityResultContracts.RequestMultiplePermissions(),
-                        result -> {
-                            boolean fineLocationAllowed =
-                                    Boolean.TRUE.equals(result.get(Manifest.permission.ACCESS_FINE_LOCATION));
-
-                            if (fineLocationAllowed) {
-                                updateLocation();
-                            }
-                        }
-                );
+        locationPermissionRequest = registerForActivityResult(
+                new ActivityResultContracts.RequestMultiplePermissions(),
+                result -> {
+                    if (Boolean.TRUE.equals(result.get(Manifest.permission.ACCESS_FINE_LOCATION))) {
+                        updateLocation();
+                    }
+                }
+        );
     }
-
 
     @Override
     protected void onResume() {
         super.onResume();
-        ListenerRegistration locationsRegistration;
-        ListenerRegistration sharedRegistration;
+
         locationPermissionRequest.launch(new String[]{
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.POST_NOTIFICATIONS,
@@ -213,215 +160,103 @@ public class MyLocation extends AppCompatActivity {
 
         mapView.onResume();
 
-        mapView.getOverlays().removeIf(o -> o instanceof Marker);
-
-        FirebaseFirestore.getInstance()
+        // Assign to class fields so onPause can remove them
+        locationsRegistration = FirebaseFirestore.getInstance()
                 .collection("locations")
                 .addSnapshotListener((value, error) -> {
-
-                    if (error != null) {
-                        Log.d("MyLocation", "Listener for changes on server not working");
-                        return;
-                    }
-
+                    if (error != null) { Log.d("MyLocation", "listener error: " + error); return; }
                     storedLocations.clear();
-
                     for (QueryDocumentSnapshot doc : value) {
-                        StoredLocation location = doc.toObject(StoredLocation.class);
-                        storedLocations.put(location.locationName, location);
+                        StoredLocation loc = doc.toObject(StoredLocation.class);
+                        storedLocations.put(loc.locationName, loc);
                     }
-
                     drawAllMarkers();
                 });
 
-        CollectionReference shared = db.collection("sharedLocations");
-
-        shared.addSnapshotListener((value, error) -> {
-
-            if (error != null) return;
-
-            // Remove any previously drawn shared markers before redrawing
-            mapView.getOverlays().removeIf(o -> o instanceof Marker);
-            drawAllMarkers(); // redraw personal locations first
-
-            for (QueryDocumentSnapshot doc : value) {
-                StoredLocation sharedLoc = doc.toObject(StoredLocation.class);
-                addMarker(sharedLoc, "sharedLocations");   // pass correct collection
-            }
-
-            mapView.invalidate();
-        });
+        sharedRegistration = db.collection("sharedLocations")
+                .addSnapshotListener((value, error) -> {
+                    if (error != null || value == null) return;
+                    mapView.getOverlays().removeIf(o -> o instanceof Marker);
+                    drawAllMarkers();
+                    for (QueryDocumentSnapshot doc : value) {
+                        addMarker(doc.toObject(StoredLocation.class), "sharedLocations");
+                    }
+                    mapView.invalidate();
+                });
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-
-        if (locationManager != null) {
-            locationManager.removeUpdates(locationListener);
-        }
-
-        if (listenerRegistration != null) {
-            listenerRegistration.remove();
-        }
-
+        if (locationManager       != null) locationManager.removeUpdates(locationListener);
+        if (locationsRegistration != null) locationsRegistration.remove();
+        if (sharedRegistration    != null) sharedRegistration.remove();
         mapView.onPause();
     }
 
     private void drawAllMarkers() {
-
         mapView.getOverlays().removeIf(o -> o instanceof Marker);
-
-        // Draw locations from personal collection
-        for (StoredLocation storedLoc : storedLocations.values()) {
-            addMarker(storedLoc, "locations");
-        }
-
+        for (StoredLocation loc : storedLocations.values()) addMarker(loc, "locations");
         mapView.invalidate();
     }
 
-    private void addMarker(StoredLocation storedLoc, String collection) {
-
-        GeoPoint geoPoint = new GeoPoint(storedLoc.latitude, storedLoc.longitude);
-
+    private void addMarker(StoredLocation loc, String collection) {
         Marker marker = new Marker(mapView);
-        marker.setPosition(geoPoint);
+        marker.setPosition(new GeoPoint(loc.latitude, loc.longitude));
         marker.setIcon(getDrawable(R.drawable.current_location));
-        marker.setTitle(storedLoc.locationName);
-        marker.setSubDescription(storedLoc.description);
-
-        marker.setOnMarkerClickListener((m, mapView) -> {
-            openLocationDetails(storedLoc, collection);
-            return true;
-        });
-
+        marker.setTitle(loc.locationName);
+        marker.setSubDescription(loc.description);
+        marker.setOnMarkerClickListener((m, mv) -> { openLocationDetails(loc, collection); return true; });
         mapView.getOverlays().add(marker);
     }
-    private void openLocationDetails(StoredLocation loc, String collection) {
 
+    private void openLocationDetails(StoredLocation loc, String collection) {
         Intent intent = new Intent(MyLocation.this, ViewLocationActivity.class);
         intent.putExtra("id", loc.id);
-        intent.putExtra("collection", collection);   // tells ViewLocationActivity where to fetch from
+        intent.putExtra("collection", collection);
         startActivity(intent);
     }
 
-    private void showShareDialog(StoredLocation storedLocation) {
-
-        new AlertDialog.Builder(this)
-                .setTitle("Share Location")
-                .setMessage("Do you want to share " + storedLocation.locationName + " with all users?")
-                .setPositiveButton("Share", (dialog, i) -> {
-
-                    db.collection("sharedLocations")
-                            .document(storedLocation.locationName)
-                            .set(storedLocation)
-                            .addOnSuccessListener(a ->
-                                    Toast.makeText(this, "Location shared!", Toast.LENGTH_SHORT).show()
-                            )
-                            .addOnFailureListener(e ->
-                                    Toast.makeText(this, "Failed to share: " + e.getMessage(), Toast.LENGTH_LONG).show()
-                            );
-
-                })
-                .setNegativeButton("Cancel", null)
-                .create()
-                .show();
-    }
-
-    private void addNewLocationDialog(GeoPoint geoPoint) {
-
-        EditText locationEditText = new EditText(this);
-
-        new AlertDialog.Builder(this)
-                .setTitle("Create New Location")
-                .setView(locationEditText)
-                .setPositiveButton("Add", (dialogInterface, i) -> {
-
-                    String locationName = locationEditText.getText().toString();
-
-                    StoredLocation newLocation = new StoredLocation(
-                            locationName,
-                            geoPoint.getLatitude(),
-                            geoPoint.getLongitude()
-                    );
-
-                    db.collection("locations")
-                            .document(newLocation.locationName)
-                            .set(newLocation);
-                })
-                .setNegativeButton("Cancel", null)
-                .create()
-                .show();
-    }
-
     private void createNotificationChannel() {
-        NotificationChannel channel =
-                new NotificationChannel(NOTIFICATION_KEY, "MyLocationChannel",
-                        android.app.NotificationManager.IMPORTANCE_DEFAULT);
-
-        channel.setDescription("MyLocation updates");
-
-        android.app.NotificationManager manager =
-                getSystemService(android.app.NotificationManager.class);
-
-        manager.createNotificationChannel(channel);
+        NotificationChannel ch = new NotificationChannel(
+                NOTIFICATION_KEY, "MyLocationChannel",
+                android.app.NotificationManager.IMPORTANCE_DEFAULT);
+        ch.setDescription("MyLocation updates");
+        getSystemService(android.app.NotificationManager.class).createNotificationChannel(ch);
     }
 
-    private Notification createNotification(StoredLocation storedLocation, double distance) {
-
-        Intent intent = new Intent(this, MyLocation.class);
-        intent.putExtra(NOTIFICATION_KEY, storedLocation.locationName);
-
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-                this,
-                NOTIFICATION_INTENT_CODE,
-                intent,
-                PendingIntent.FLAG_IMMUTABLE
-        );
-
+    private Notification createNotification(StoredLocation loc, double distance) {
+        PendingIntent pi = PendingIntent.getActivity(this, NOTIFICATION_INTENT_CODE,
+                new Intent(this, MyLocation.class).putExtra(NOTIFICATION_KEY, loc.locationName),
+                PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this, NOTIFICATION_KEY)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("MyLocation update: " + storedLocation.locationName)
-                .setContentText("You are " + distance + " metres from " + storedLocation.locationName)
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(true)
-                .build();
+                .setContentTitle("MyLocation: " + loc.locationName)
+                .setContentText("You are " + (int) distance + " m away")
+                .setContentIntent(pi).setAutoCancel(true).build();
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-
-        String locationName = intent.getStringExtra(NOTIFICATION_KEY);
-
-        for (StoredLocation storedLocation : storedLocations.values()) {
-            if (storedLocation.locationName.equals(locationName)) {
-                showNotificationDialog(storedLocation);
-                return;
-            }
+        String name = intent.getStringExtra(NOTIFICATION_KEY);
+        for (StoredLocation loc : storedLocations.values()) {
+            if (loc.locationName.equals(name)) { showNotificationDialog(loc); return; }
         }
     }
 
-    private void showNotificationDialog(StoredLocation storedLocation) {
-
-        storedLocation.notificationActive = false;
-
-        new AlertDialog.Builder(this)
-                .setTitle(storedLocation.locationName)
-                .setMessage("You are close to this location. Do you want to continue to receive notifications for this location in the future?")
-                .setPositiveButton("Yes", (dialogInterface, i) -> {
-                    storedLocation.notificationsRequired = true;
-                    db.collection("locations")
-                            .document(storedLocation.locationName)
-                            .set(storedLocation);
+    private void showNotificationDialog(StoredLocation loc) {
+        loc.notificationActive = false;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(loc.locationName)
+                .setMessage("You are close. Keep receiving notifications here?")
+                .setPositiveButton("Yes", (d, i) -> {
+                    loc.notificationsRequired = true;
+                    db.collection("locations").document(loc.locationName).set(loc);
                 })
-                .setNegativeButton("No", (dialogInterface, i) -> {
-                    storedLocation.notificationsRequired = false;
-                    db.collection("locations")
-                            .document(storedLocation.locationName)
-                            .set(storedLocation);
-                })
-                .create()
-                .show();
+                .setNegativeButton("No", (d, i) -> {
+                    loc.notificationsRequired = false;
+                    db.collection("locations").document(loc.locationName).set(loc);
+                }).show();
     }
 }

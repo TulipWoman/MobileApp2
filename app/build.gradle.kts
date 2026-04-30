@@ -38,12 +38,11 @@ dependencies {
     implementation(libs.appcompat)
     implementation(libs.constraintlayout)
     implementation(libs.material)
+    implementation("androidx.recyclerview:recyclerview:1.3.2")   // NEW — task list
     implementation("org.osmdroid:osmdroid-android:6.1.20")
 
     // Firebase BOM
     implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
-
-    // Firestore (required!)
     implementation("com.google.firebase:firebase-firestore")
 
     testImplementation(libs.junit)

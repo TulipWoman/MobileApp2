@@ -3,9 +3,11 @@ package com.example.mylocation;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -13,56 +15,59 @@ import com.google.firebase.firestore.FirebaseFirestore;
 
 public class ViewLocationActivity extends AppCompatActivity {
 
-    private StoredLocation loc;   // the reminder we are viewing
+    private StoredLocation loc;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_view_location);
 
-        // Get the ID and collection name passed from the marker click.
-        // Falls back to "locations" so existing code paths are unaffected.
-        String id = getIntent().getStringExtra("id");
+        String id         = getIntent().getStringExtra("id");
         String collection = getIntent().getStringExtra("collection");
         if (collection == null) collection = "locations";
 
         boolean isShared = "sharedLocations".equals(collection);
 
-        // Load the location from whichever Firestore collection it lives in
         FirebaseFirestore.getInstance()
                 .collection(collection)
                 .document(id)
                 .get()
                 .addOnSuccessListener(doc -> {
                     loc = doc.toObject(StoredLocation.class);
-                    if (loc != null) {
-                        showDetails(isShared);
-                    }
+                    if (loc != null) showDetails(isShared);
                 });
     }
 
     private void showDetails(boolean isShared) {
-
-        TextView title = findViewById(R.id.titleText);
+        TextView title       = findViewById(R.id.titleText);
         TextView description = findViewById(R.id.descriptionText);
-        ImageView image = findViewById(R.id.imageView);
+        TextView dateText    = findViewById(R.id.dateText);
+        TextView timeText    = findViewById(R.id.timeText);
+        ImageView image      = findViewById(R.id.imageView);
+        Button edit          = findViewById(R.id.editButton);
+        Button delete        = findViewById(R.id.deleteButton);
+        Button share         = findViewById(R.id.shareButton);
 
-        Button edit = findViewById(R.id.editButton);
-        Button delete = findViewById(R.id.deleteButton);
-        Button share = findViewById(R.id.shareButton);
-
-        // Fill UI with reminder data
         title.setText(loc.locationName);
         description.setText(loc.description);
+
+        // Show date/time if set
+        if (loc.dueDate != null && !loc.dueDate.isEmpty()) {
+            dateText.setText("Due: " + loc.dueDate);
+            dateText.setVisibility(View.VISIBLE);
+        }
+        if (loc.dueTime != null && !loc.dueTime.isEmpty()) {
+            timeText.setText("Time: " + loc.dueTime);
+            timeText.setVisibility(View.VISIBLE);
+        }
 
         if (loc.imageUri != null) {
             image.setImageURI(Uri.parse(loc.imageUri));
         }
 
         if (isShared) {
-            // Shared locations are read-only — hide Edit and Delete
-            edit.setVisibility(android.view.View.GONE);
-            delete.setVisibility(android.view.View.GONE);
+            edit.setVisibility(View.GONE);
+            delete.setVisibility(View.GONE);
             share.setText("Already Shared");
             share.setEnabled(false);
         } else {
@@ -74,7 +79,7 @@ public class ViewLocationActivity extends AppCompatActivity {
 
     private void editLocation() {
         Intent intent = new Intent(this, AddLocationActivity.class);
-        intent.putExtra("id", loc.id);   // tells AddLocationActivity to load + edit
+        intent.putExtra("id", loc.id);
         intent.putExtra("lat", loc.latitude);
         intent.putExtra("lon", loc.longitude);
         startActivity(intent);
@@ -98,10 +103,10 @@ public class ViewLocationActivity extends AppCompatActivity {
                                 .document(loc.id)
                                 .set(loc)
                                 .addOnSuccessListener(a ->
-                                        android.widget.Toast.makeText(this, "Location shared!", android.widget.Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(this, "Location shared!", Toast.LENGTH_SHORT).show()
                                 )
                                 .addOnFailureListener(e ->
-                                        android.widget.Toast.makeText(this, "Failed to share: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show()
+                                        Toast.makeText(this, "Failed: " + e.getMessage(), Toast.LENGTH_LONG).show()
                                 )
                 )
                 .setNegativeButton("Cancel", null)
