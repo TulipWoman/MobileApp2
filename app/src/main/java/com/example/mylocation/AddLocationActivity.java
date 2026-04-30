@@ -63,6 +63,17 @@ public class AddLocationActivity extends AppCompatActivity {
         pickDateButton.setOnClickListener(v -> showDatePicker());
         pickTimeButton.setOnClickListener(v -> showTimePicker());
 
+        // Show attached coordinates if launched with a location
+        double intentLat = getIntent().getDoubleExtra("lat", 0);
+        double intentLon = getIntent().getDoubleExtra("lon", 0);
+        android.widget.TextView locationLabel = findViewById(R.id.locationLabel);
+        if (intentLat != 0 || intentLon != 0) {
+            locationLabel.setText(String.format("Coordinates: %.5f, %.5f", intentLat, intentLon));
+            locationLabel.setVisibility(android.view.View.VISIBLE);
+        } else {
+            locationLabel.setVisibility(android.view.View.GONE);
+        }
+
         // Detect edit mode
         String editId = getIntent().getStringExtra("id");
         boolean isEdit = editId != null;
@@ -89,6 +100,11 @@ public class AddLocationActivity extends AppCompatActivity {
                             if (loc.imageUri != null) {
                                 imageUri = Uri.parse(loc.imageUri);
                                 imagePreview.setImageURI(imageUri);
+                            }
+
+                            if (loc.latitude != 0 || loc.longitude != 0) {
+                                locationLabel.setText(String.format("Coordinates: %.5f, %.5f", loc.latitude, loc.longitude));
+                                locationLabel.setVisibility(android.view.View.VISIBLE);
                             }
                         }
                     });

@@ -43,9 +43,13 @@ public class MyLocation extends AppCompatActivity {
     static final int    NOTIFICATION_INTENT_CODE = 0;
 
     Map<String, StoredLocation> storedLocations = new HashMap<>();
+    // Tracks which location IDs have an active notification this session.
+    // Kept separately so Firestore snapshot refreshes don't reset the guard.
+    final java.util.Set<String> activeNotifications = new java.util.HashSet<>();
     double triggerDistance = 100;
 
     MapView mapView;
+    Marker  currentLocationMarker;
     ActivityResultLauncher<String[]> locationPermissionRequest;
     NotificationManagerCompat notificationManager;
 
@@ -115,9 +119,28 @@ public class MyLocation extends AppCompatActivity {
 
         // Location listener
         locationListener = new LocationListener() {
+            boolean firstFix = true;
+
             @Override
             public void onLocationChanged(@NonNull Location location) {
                 GeoPoint current = new GeoPoint(location.getLatitude(), location.getLongitude());
+
+                // Move or create the "you are here" marker
+                if (currentLocationMarker == null) {
+                    currentLocationMarker = new Marker(mapView);
+                    currentLocationMarker.setTitle("You are here");
+                    currentLocationMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+                    mapView.getOverlays().add(currentLocationMarker);
+                }
+                currentLocationMarker.setPosition(current);
+
+                // Pan to current position on the first GPS fix
+                if (firstFix) {
+                    mapView.getController().animateTo(current);
+                    firstFix = false;
+                }
+
+                mapView.invalidate();
                 for (StoredLocation storedLoc : storedLocations.values()) {
                     GeoPoint target   = new GeoPoint(storedLoc.latitude, storedLoc.longitude);
                     double   distance = current.distanceToAsDouble(target);
@@ -125,14 +148,14 @@ public class MyLocation extends AppCompatActivity {
                         Toast.makeText(getApplicationContext(),
                                 "You are " + (int) distance + " m from " + storedLoc.locationName,
                                 Toast.LENGTH_LONG).show();
-                        if (!storedLoc.notificationActive && storedLoc.notificationsRequired) {
+                        if (!activeNotifications.contains(storedLoc.id) && storedLoc.notificationsRequired) {
                             notificationManager.notify(
                                     storedLoc.locationName.hashCode(),
                                     createNotification(storedLoc, distance));
-                            storedLoc.notificationActive = true;
+                            activeNotifications.add(storedLoc.id);
                         }
                     } else {
-                        storedLoc.notificationActive = false;
+                        activeNotifications.remove(storedLoc.id);
                     }
                 }
             }
@@ -152,11 +175,20 @@ public class MyLocation extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        locationPermissionRequest.launch(new String[]{
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.POST_NOTIFICATIONS,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-        });
+        // Only prompt for permissions if not already granted; otherwise start location updates directly
+        boolean hasFine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        boolean hasNotif = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        if (!hasFine || !hasNotif) {
+            locationPermissionRequest.launch(new String[]{
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+            });
+        } else {
+            updateLocation();
+        }
 
         mapView.onResume();
 
@@ -168,7 +200,7 @@ public class MyLocation extends AppCompatActivity {
                     storedLocations.clear();
                     for (QueryDocumentSnapshot doc : value) {
                         StoredLocation loc = doc.toObject(StoredLocation.class);
-                        storedLocations.put(loc.locationName, loc);
+                        storedLocations.put(loc.id, loc);
                     }
                     drawAllMarkers();
                 });
@@ -176,7 +208,7 @@ public class MyLocation extends AppCompatActivity {
         sharedRegistration = db.collection("sharedLocations")
                 .addSnapshotListener((value, error) -> {
                     if (error != null || value == null) return;
-                    mapView.getOverlays().removeIf(o -> o instanceof Marker);
+                    mapView.getOverlays().removeIf(o -> o instanceof Marker && o != currentLocationMarker);
                     drawAllMarkers();
                     for (QueryDocumentSnapshot doc : value) {
                         addMarker(doc.toObject(StoredLocation.class), "sharedLocations");
@@ -195,12 +227,14 @@ public class MyLocation extends AppCompatActivity {
     }
 
     private void drawAllMarkers() {
-        mapView.getOverlays().removeIf(o -> o instanceof Marker);
+        mapView.getOverlays().removeIf(o -> o instanceof Marker && o != currentLocationMarker);
         for (StoredLocation loc : storedLocations.values()) addMarker(loc, "locations");
         mapView.invalidate();
     }
 
     private void addMarker(StoredLocation loc, String collection) {
+        // Skip tasks with no location attached (saved from task list without coordinates)
+        if (loc.latitude == 0 && loc.longitude == 0) return;
         Marker marker = new Marker(mapView);
         marker.setPosition(new GeoPoint(loc.latitude, loc.longitude));
         marker.setIcon(getDrawable(R.drawable.current_location));
@@ -226,9 +260,9 @@ public class MyLocation extends AppCompatActivity {
     }
 
     private Notification createNotification(StoredLocation loc, double distance) {
-        PendingIntent pi = PendingIntent.getActivity(this, NOTIFICATION_INTENT_CODE,
+        PendingIntent pi = PendingIntent.getActivity(this, loc.id.hashCode(),
                 new Intent(this, MyLocation.class).putExtra(NOTIFICATION_KEY, loc.locationName),
-                PendingIntent.FLAG_IMMUTABLE);
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Builder(this, NOTIFICATION_KEY)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("MyLocation: " + loc.locationName)
@@ -246,17 +280,17 @@ public class MyLocation extends AppCompatActivity {
     }
 
     private void showNotificationDialog(StoredLocation loc) {
-        loc.notificationActive = false;
+        activeNotifications.remove(loc.id);
         new android.app.AlertDialog.Builder(this)
                 .setTitle(loc.locationName)
                 .setMessage("You are close. Keep receiving notifications here?")
                 .setPositiveButton("Yes", (d, i) -> {
                     loc.notificationsRequired = true;
-                    db.collection("locations").document(loc.locationName).set(loc);
+                    db.collection("locations").document(loc.id).set(loc);
                 })
                 .setNegativeButton("No", (d, i) -> {
                     loc.notificationsRequired = false;
-                    db.collection("locations").document(loc.locationName).set(loc);
+                    db.collection("locations").document(loc.id).set(loc);
                 }).show();
     }
 }

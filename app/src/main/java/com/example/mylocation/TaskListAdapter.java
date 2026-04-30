@@ -16,12 +16,20 @@ public class TaskListAdapter extends RecyclerView.Adapter<TaskListAdapter.TaskVi
         void onTaskClick(StoredLocation loc);
     }
 
-    private final List<StoredLocation> tasks;
-    private final OnTaskClickListener  listener;
+    public interface OnTaskLongClickListener {
+        void onTaskLongClick(StoredLocation loc);
+    }
 
-    public TaskListAdapter(List<StoredLocation> tasks, OnTaskClickListener listener) {
-        this.tasks    = tasks;
-        this.listener = listener;
+    private final List<StoredLocation>    tasks;
+    private final OnTaskClickListener     listener;
+    private final OnTaskLongClickListener longClickListener;
+
+    public TaskListAdapter(List<StoredLocation> tasks,
+                           OnTaskClickListener listener,
+                           OnTaskLongClickListener longClickListener) {
+        this.tasks             = tasks;
+        this.listener          = listener;
+        this.longClickListener = longClickListener;
     }
 
     @NonNull
@@ -35,7 +43,7 @@ public class TaskListAdapter extends RecyclerView.Adapter<TaskListAdapter.TaskVi
     @Override
     public void onBindViewHolder(@NonNull TaskViewHolder holder, int position) {
         StoredLocation loc = tasks.get(position);
-        holder.bind(loc, listener);
+        holder.bind(loc, listener, longClickListener);
     }
 
     @Override
@@ -54,7 +62,7 @@ public class TaskListAdapter extends RecyclerView.Adapter<TaskListAdapter.TaskVi
             subtitleText = itemView.findViewById(R.id.taskItemSubtitle);
         }
 
-        void bind(StoredLocation loc, OnTaskClickListener listener) {
+        void bind(StoredLocation loc, OnTaskClickListener listener, OnTaskLongClickListener longClickListener) {
             titleText.setText(loc.locationName);
 
             // Build subtitle: show date/time if set, otherwise description
@@ -71,6 +79,10 @@ public class TaskListAdapter extends RecyclerView.Adapter<TaskListAdapter.TaskVi
             subtitleText.setVisibility(sub.length() > 0 ? View.VISIBLE : View.GONE);
 
             itemView.setOnClickListener(v -> listener.onTaskClick(loc));
+            itemView.setOnLongClickListener(v -> {
+                longClickListener.onTaskLongClick(loc);
+                return true;
+            });
         }
     }
 }
