@@ -15,17 +15,16 @@ import android.app.AlertDialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.PendingIntent;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -35,6 +34,7 @@ import androidx.core.app.NotificationManagerCompat;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
@@ -48,19 +48,21 @@ public class MyLocation extends AppCompatActivity {
     static final int NOTIFICATION_INTENT_CODE = 0;
 
     Map<String, StoredLocation> storedLocations = new HashMap<>();
-    double triggerDistance = 100;   // 100 metres
+    double triggerDistance = 100;
 
     MapView mapView;
     ActivityResultLauncher<String[]> locationPermissionRequest;
     NotificationManagerCompat notificationManager;
 
-    long minimumTimeBetweenUpdates = 10000;      // 10 seconds
-    float minimumDistanceBetweenUpdates = 0.5f;  // 0.5 metres
+    long minimumTimeBetweenUpdates = 10000;
+    float minimumDistanceBetweenUpdates = 0.5f;
 
     LocationListener locationListener;
     LocationManager locationManager;
     FirebaseFirestore db;
     ListenerRegistration listenerRegistration;
+
+    Uri imageUri;
 
     @SuppressLint("MissingPermission")
     public void updateLocation() {
@@ -84,8 +86,11 @@ public class MyLocation extends AppCompatActivity {
         setContentView(R.layout.activity_my_location);
         db = FirebaseFirestore.getInstance();
 
+        double lat = getIntent().getDoubleExtra("lat", 0);
+        double lon = getIntent().getDoubleExtra("lon", 0);
+
         notificationManager = NotificationManagerCompat.from(getApplicationContext());
-        createNotificationChannel();   // IMPORTANT: channel created BEFORE notifications
+        createNotificationChannel();
 
         mapView = findViewById(R.id.map);
         mapView.setTileSource(TileSourceFactory.MAPNIK);
@@ -96,14 +101,12 @@ public class MyLocation extends AppCompatActivity {
         GeoPoint myPoint = new GeoPoint(52.268, -2.150);
         mapController.setCenter(myPoint);
 
-        // Create some interesting locations
         StoredLocation location1 = new StoredLocation("Ombersley", 52.27113, -2.2289);
         StoredLocation location2 = new StoredLocation("City Campus", 52.1958, -2.2261);
         StoredLocation location3 = new StoredLocation("Beer", 50.69713, -3.10145);
 
         CollectionReference collection = db.collection("locations");
         db.collection("sharedLocations");
-
 
         WriteBatch batch = db.batch();
         batch.set(collection.document(location1.locationName), location1);
@@ -114,16 +117,9 @@ public class MyLocation extends AppCompatActivity {
                 .addOnSuccessListener(aVoid -> Log.d("MyLocation", "Successfully stored locations to Firebase"))
                 .addOnFailureListener(e -> Log.d("MyLocation", "Failed to store to Firebase"));
 
-
-//        // Enable notifications for all locations initially
-//        location1.notificationsRequired = true;
-//        location2.notificationsRequired = true;
-//        location3.notificationsRequired = true;
-
         storedLocations.put(location1.locationName, location1);
         storedLocations.put(location2.locationName, location2);
         storedLocations.put(location3.locationName, location3);
-
 
         MapEventsOverlay mapEventsOverlay = new MapEventsOverlay(new MapEventsReceiver() {
             @Override
@@ -134,16 +130,17 @@ public class MyLocation extends AppCompatActivity {
 
             @Override
             public boolean longPressHelper(GeoPoint p) {
-                //addNewLocationDialog(p);
                 Log.d("MyLocation", "Press at " + p.toString());
-                addNewLocationDialog(p);
+                Intent intent = new Intent(MyLocation.this, AddLocationActivity.class);
+                intent.putExtra("lat", p.getLatitude());
+                intent.putExtra("lon", p.getLongitude());
+                startActivity(intent);
                 return true;
             }
         });
 
         mapView.getOverlays().add(mapEventsOverlay);
 
-        // Create the listener
         locationListener = new LocationListener() {
 
             @Override
@@ -202,6 +199,30 @@ public class MyLocation extends AppCompatActivity {
                 );
     }
 
+    private void saveLocation() {
+
+        double lat = getIntent().getDoubleExtra("lat", 0);
+        double lon = getIntent().getDoubleExtra("lon", 0);
+
+        EditText titleInput = findViewById(R.id.titleInput);
+        EditText descriptionInput = findViewById(R.id.descriptionInput);
+
+        StoredLocation loc = new StoredLocation(
+                UUID.randomUUID().toString(),
+                titleInput.getText().toString(),
+                descriptionInput.getText().toString(),
+                imageUri != null ? imageUri.toString() : null,
+                lat,
+                lon
+        );
+
+        FirebaseFirestore.getInstance()
+                .collection("locations")
+                .document(loc.id)
+                .set(loc)
+                .addOnSuccessListener(a -> finish());
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -214,19 +235,16 @@ public class MyLocation extends AppCompatActivity {
 
         mapView.onResume();
 
-        // Only remove markers, NOT the MapEventsOverlay
         mapView.getOverlays().removeIf(o -> o instanceof Marker);
 
-        // PRIVATE locations
-        CollectionReference collection = db.collection("locations");
-
-        listenerRegistration = collection.addSnapshotListener((value, error) -> {
+        FirebaseFirestore.getInstance()
+                .collection("locations")
+                .addSnapshotListener((value, error) -> {
 
             if (error != null) {
                 Log.d("MyLocation", "Listener for changes on server not working");
                 return;
             }
-
 
             storedLocations.clear();
 
@@ -238,14 +256,12 @@ public class MyLocation extends AppCompatActivity {
             drawAllMarkers();
         });
 
-        // SHARED locations
         CollectionReference shared = db.collection("sharedLocations");
 
         shared.addSnapshotListener((value, error) -> {
 
             if (error != null) return;
 
-            // ⭐ FIX: do NOT clear here — shared adds on top of private
             for (QueryDocumentSnapshot doc : value) {
                 StoredLocation sharedLoc = doc.toObject(StoredLocation.class);
                 storedLocations.put(sharedLoc.locationName, sharedLoc);
@@ -254,7 +270,6 @@ public class MyLocation extends AppCompatActivity {
             drawAllMarkers();
         });
     }
-
 
     @Override
     protected void onPause() {
@@ -270,9 +285,9 @@ public class MyLocation extends AppCompatActivity {
 
         mapView.onPause();
     }
+
     private void drawAllMarkers() {
 
-        // ❗ Only remove markers, NOT the MapEventsOverlay
         mapView.getOverlays().removeIf(o -> o instanceof Marker);
 
         for (StoredLocation storedLoc : storedLocations.values()) {
@@ -283,8 +298,9 @@ public class MyLocation extends AppCompatActivity {
             marker.setPosition(geoPoint);
             marker.setIcon(getDrawable(R.drawable.current_location));
             marker.setTitle(storedLoc.locationName);
+            marker.setTitle(loc.locationName);
+            marker.setSubDescription(loc.description);
 
-            // Click to share
             marker.setOnMarkerClickListener((m, mapView) -> {
                 showShareDialog(storedLoc);
                 return true;
@@ -294,6 +310,12 @@ public class MyLocation extends AppCompatActivity {
         }
 
         mapView.invalidate();
+    }
+    private void openLocationDetails(StoredLocation loc) {
+
+        Intent intent = new Intent(MyLocation.this, ViewLocationActivity.class);
+        intent.putExtra("id", loc.id);
+        startActivity(intent);
     }
 
     private void showShareDialog(StoredLocation storedLocation) {
@@ -319,9 +341,8 @@ public class MyLocation extends AppCompatActivity {
                 .show();
     }
 
-
     private void addNewLocationDialog(GeoPoint geoPoint) {
-//Log.d("MyLocation", "Long at ", + GeoPoint);
+
         EditText locationEditText = new EditText(this);
 
         new AlertDialog.Builder(this)
@@ -417,4 +438,3 @@ public class MyLocation extends AppCompatActivity {
                 .show();
     }
 }
-
