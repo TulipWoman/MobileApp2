@@ -8,6 +8,8 @@ public class StoredLocation implements Serializable {
     public String locationName;     // title of the reminder
     public String description;      // reminder description
     public String imageUri;         // photo URI
+    public String dueDate;          // e.g. "25/6/2025"
+    public String dueTime;          // e.g. "14/30"
 
     public double latitude;
     public double longitude;

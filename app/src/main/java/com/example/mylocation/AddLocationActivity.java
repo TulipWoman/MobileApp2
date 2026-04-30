@@ -1,11 +1,16 @@
 package com.example.mylocation;
 
+import android.app.DatePickerDialog;
+import android.app.TimePickerDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Button;
+import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TimePicker;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.result.ActivityResultLauncher;
@@ -42,6 +47,8 @@ public class AddLocationActivity extends AppCompatActivity {
         ImageView imagePreview = findViewById(R.id.imagePreview);
         Button selectImageButton = findViewById(R.id.selectImageButton);
         Button saveButton = findViewById(R.id.saveButton);
+        Button pickDateButton = findViewById(R.id.pickDateButton);
+        Button pickTimeButton = findViewById(R.id.pickTimeButton);
 
         // Image picker
         ActivityResultLauncher<String> pickImageLauncher =
@@ -53,6 +60,8 @@ public class AddLocationActivity extends AppCompatActivity {
                 });
 
         selectImageButton.setOnClickListener(v -> pickImageLauncher.launch("image/*"));
+        pickDateButton.setOnClickListener(v -> showDatePicker());
+        pickTimeButton.setOnClickListener(v -> showTimePicker());
 
         // Detect edit mode
         String editId = getIntent().getStringExtra("id");
@@ -69,6 +78,13 @@ public class AddLocationActivity extends AppCompatActivity {
                         if (loc != null) {
                             titleInput.setText(loc.locationName);
                             descriptionInput.setText(loc.description);
+
+                            if (loc.dueDate != null) {
+                                ((EditText) findViewById(R.id.taskDueDateView)).setText(loc.dueDate);
+                            }
+                            if (loc.dueTime != null) {
+                                ((EditText) findViewById(R.id.taskDueTimeView)).setText(loc.dueTime);
+                            }
 
                             if (loc.imageUri != null) {
                                 imageUri = Uri.parse(loc.imageUri);
@@ -92,25 +108,26 @@ public class AddLocationActivity extends AppCompatActivity {
         double lon = getIntent().getDoubleExtra("lon", 0);
 
         // UI values
-        EditText titleInput = findViewById(R.id.titleInput);
+        EditText titleInput       = findViewById(R.id.titleInput);
         EditText descriptionInput = findViewById(R.id.descriptionInput);
+        EditText dateView         = findViewById(R.id.taskDueDateView);
+        EditText timeView         = findViewById(R.id.taskDueTimeView);
 
-        String title = titleInput.getText().toString();
+        String title       = titleInput.getText().toString();
         String description = descriptionInput.getText().toString();
-        String image = (imageUri != null) ? imageUri.toString() : null;
+        String image       = (imageUri != null) ? imageUri.toString() : null;
+        String dueDate     = dateView.getText().toString();
+        String dueTime     = timeView.getText().toString();
 
         // Use existing ID if editing
         String id = isEdit ? editId : UUID.randomUUID().toString();
 
         // Create object
         StoredLocation loc = new StoredLocation(
-                id,
-                title,
-                description,
-                image,
-                lat,
-                lon
+                id, title, description, image, lat, lon
         );
+        loc.dueDate = dueDate.isEmpty() ? null : dueDate;
+        loc.dueTime = dueTime.isEmpty() ? null : dueTime;
 
         // Save to Firestore
         FirebaseFirestore.getInstance()
@@ -118,5 +135,45 @@ public class AddLocationActivity extends AppCompatActivity {
                 .document(id)
                 .set(loc)
                 .addOnSuccessListener(a -> finish());
+    }
+
+    private void showDatePicker() {
+        Log.d("AddLocationActivity", "showDatePicker");
+
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        int year  = cal.get(java.util.Calendar.YEAR);
+        int month = cal.get(java.util.Calendar.MONTH);
+        int day   = cal.get(java.util.Calendar.DAY_OF_MONTH);
+
+        DatePickerDialog.OnDateSetListener listener = new DatePickerDialog.OnDateSetListener() {
+            @Override
+            public void onDateSet(DatePicker view, int year, int month, int dayOfMonth) {
+                EditText dateView = findViewById(R.id.taskDueDateView);
+                // month is 0-based, so add 1 for display
+                dateView.setText(dayOfMonth + "/" + (month + 1) + "/" + year);
+            }
+        };
+
+        new DatePickerDialog(this, listener, year, month, day).show();
+    }
+
+    private void showTimePicker() {
+        Log.d("AddLocationActivity", "showTimePicker");
+
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        int hour   = cal.get(java.util.Calendar.HOUR_OF_DAY);
+        int minute = cal.get(java.util.Calendar.MINUTE);
+
+        TimePickerDialog.OnTimeSetListener listener = new TimePickerDialog.OnTimeSetListener() {
+            @Override
+            public void onTimeSet(TimePicker view, int hourOfDay, int minute) {
+                EditText timeView = findViewById(R.id.taskDueTimeView);
+                // Zero-pad minutes so "9:05" doesn't show as "9/5"
+                timeView.setText(String.format("%02d:%02d", hourOfDay, minute));
+            }
+        };
+
+        // true = 24-hour clock
+        new TimePickerDialog(this, listener, hour, minute, true).show();
     }
 }
