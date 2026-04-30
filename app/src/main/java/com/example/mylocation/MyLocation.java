@@ -102,6 +102,8 @@ public class MyLocation extends AppCompatActivity {
         StoredLocation location3 = new StoredLocation("Beer", 50.69713, -3.10145);
 
         CollectionReference collection = db.collection("locations");
+        db.collection("sharedLocations");
+
 
         WriteBatch batch = db.batch();
         batch.set(collection.document(location1.locationName), location1);
@@ -212,6 +214,10 @@ public class MyLocation extends AppCompatActivity {
 
         mapView.onResume();
 
+        // Only remove markers, NOT the MapEventsOverlay
+        mapView.getOverlays().removeIf(o -> o instanceof Marker);
+
+        // PRIVATE locations
         CollectionReference collection = db.collection("locations");
 
         listenerRegistration = collection.addSnapshotListener((value, error) -> {
@@ -221,23 +227,31 @@ public class MyLocation extends AppCompatActivity {
                 return;
             }
 
-            // Update local HashMap
+
+            storedLocations.clear();
+
             for (QueryDocumentSnapshot doc : value) {
                 StoredLocation location = doc.toObject(StoredLocation.class);
                 storedLocations.put(location.locationName, location);
             }
 
+            drawAllMarkers();
+        });
 
-            // Draw markers
-            for (StoredLocation storedLoc : storedLocations.values()) {
-                GeoPoint geoPoint = new GeoPoint(storedLoc.latitude, storedLoc.longitude);
-                Marker marker = new Marker(mapView);
-                marker.setPosition(geoPoint);
-                marker.setIcon(getDrawable(R.drawable.current_location));
-                mapView.getOverlays().add(marker);
+        // SHARED locations
+        CollectionReference shared = db.collection("sharedLocations");
+
+        shared.addSnapshotListener((value, error) -> {
+
+            if (error != null) return;
+
+            // ⭐ FIX: do NOT clear here — shared adds on top of private
+            for (QueryDocumentSnapshot doc : value) {
+                StoredLocation sharedLoc = doc.toObject(StoredLocation.class);
+                storedLocations.put(sharedLoc.locationName, sharedLoc);
             }
 
-            mapView.invalidate();
+            drawAllMarkers();
         });
     }
 
@@ -255,6 +269,54 @@ public class MyLocation extends AppCompatActivity {
         }
 
         mapView.onPause();
+    }
+    private void drawAllMarkers() {
+
+        // ❗ Only remove markers, NOT the MapEventsOverlay
+        mapView.getOverlays().removeIf(o -> o instanceof Marker);
+
+        for (StoredLocation storedLoc : storedLocations.values()) {
+
+            GeoPoint geoPoint = new GeoPoint(storedLoc.latitude, storedLoc.longitude);
+
+            Marker marker = new Marker(mapView);
+            marker.setPosition(geoPoint);
+            marker.setIcon(getDrawable(R.drawable.current_location));
+            marker.setTitle(storedLoc.locationName);
+
+            // Click to share
+            marker.setOnMarkerClickListener((m, mapView) -> {
+                showShareDialog(storedLoc);
+                return true;
+            });
+
+            mapView.getOverlays().add(marker);
+        }
+
+        mapView.invalidate();
+    }
+
+    private void showShareDialog(StoredLocation storedLocation) {
+
+        new AlertDialog.Builder(this)
+                .setTitle("Share Location")
+                .setMessage("Do you want to share " + storedLocation.locationName + " with all users?")
+                .setPositiveButton("Share", (dialog, i) -> {
+
+                    db.collection("sharedLocations")
+                            .document(storedLocation.locationName)
+                            .set(storedLocation)
+                            .addOnSuccessListener(a ->
+                                    Toast.makeText(this, "Location shared!", Toast.LENGTH_SHORT).show()
+                            )
+                            .addOnFailureListener(e ->
+                                    Toast.makeText(this, "Failed to share: " + e.getMessage(), Toast.LENGTH_LONG).show()
+                            );
+
+                })
+                .setNegativeButton("Cancel", null)
+                .create()
+                .show();
     }
 
 
