@@ -15,15 +15,22 @@ public class StoredLocation implements Serializable {
     public boolean notificationActive;
     public boolean notificationsRequired;
 
-    public StoredLocation() {}
+    public StoredLocation() {
+    }
 
-//    public StoredLocation(String id,
-//                          String locationName,
-//                          String description,
-//                          String imageUri,
-//                          double latitude,
-//                          double longitude) {
+    public StoredLocation(String id, String locationName, String description,
+                          String imageUri, double latitude, double longitude) {
+        this.id = id;
+        this.locationName = locationName;
+        this.description = description;
+        this.imageUri = imageUri;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.notificationActive = false;
+        this.notificationsRequired = true;
+    }
 
+    // Keep the short constructor too:
     public StoredLocation(String locationName, double latitude, double longitude) {
         this.id = locationName;
         this.locationName = locationName;
@@ -31,8 +38,7 @@ public class StoredLocation implements Serializable {
         this.imageUri = null;
         this.latitude = latitude;
         this.longitude = longitude;
-
         this.notificationActive = false;
         this.notificationsRequired = true;
-    } }
-
+    }
+}

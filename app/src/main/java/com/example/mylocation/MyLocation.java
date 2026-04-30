@@ -108,14 +108,14 @@ public class MyLocation extends AppCompatActivity {
         CollectionReference collection = db.collection("locations");
         db.collection("sharedLocations");
 
-        WriteBatch batch = db.batch();
-        batch.set(collection.document(location1.locationName), location1);
-        batch.set(collection.document(location2.locationName), location2);
-        batch.set(collection.document(location3.locationName), location3);
-
-        batch.commit()
-                .addOnSuccessListener(aVoid -> Log.d("MyLocation", "Successfully stored locations to Firebase"))
-                .addOnFailureListener(e -> Log.d("MyLocation", "Failed to store to Firebase"));
+//        WriteBatch batch = db.batch();
+//        batch.set(collection.document(location1.locationName), location1);
+//        batch.set(collection.document(location2.locationName), location2);
+//        batch.set(collection.document(location3.locationName), location3);
+//
+//        batch.commit()
+//                .addOnSuccessListener(aVoid -> Log.d("MyLocation", "Successfully stored locations to Firebase"))
+//                .addOnFailureListener(e -> Log.d("MyLocation", "Failed to store to Firebase"));
 
         storedLocations.put(location1.locationName, location1);
         storedLocations.put(location2.locationName, location2);
@@ -199,34 +199,12 @@ public class MyLocation extends AppCompatActivity {
                 );
     }
 
-    private void saveLocation() {
-
-        double lat = getIntent().getDoubleExtra("lat", 0);
-        double lon = getIntent().getDoubleExtra("lon", 0);
-
-        EditText titleInput = findViewById(R.id.titleInput);
-        EditText descriptionInput = findViewById(R.id.descriptionInput);
-
-        StoredLocation loc = new StoredLocation(
-                UUID.randomUUID().toString(),
-                titleInput.getText().toString(),
-                descriptionInput.getText().toString(),
-                imageUri != null ? imageUri.toString() : null,
-                lat,
-                lon
-        );
-
-        FirebaseFirestore.getInstance()
-                .collection("locations")
-                .document(loc.id)
-                .set(loc)
-                .addOnSuccessListener(a -> finish());
-    }
 
     @Override
     protected void onResume() {
         super.onResume();
-
+        ListenerRegistration locationsRegistration;
+        ListenerRegistration sharedRegistration;
         locationPermissionRequest.launch(new String[]{
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.POST_NOTIFICATIONS,
@@ -298,12 +276,12 @@ public class MyLocation extends AppCompatActivity {
             marker.setPosition(geoPoint);
             marker.setIcon(getDrawable(R.drawable.current_location));
             marker.setTitle(storedLoc.locationName);
-            marker.setTitle(loc.locationName);
-            marker.setSubDescription(loc.description);
+            marker.setSubDescription(storedLoc.description);
 
             marker.setOnMarkerClickListener((m, mapView) -> {
-                showShareDialog(storedLoc);
+                openLocationDetails(storedLoc);
                 return true;
+
             });
 
             mapView.getOverlays().add(marker);
