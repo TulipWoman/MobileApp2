@@ -20,23 +20,28 @@ public class ViewLocationActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_view_location);
 
-        // Get the ID passed from the marker click
+        // Get the ID and collection name passed from the marker click.
+        // Falls back to "locations" so existing code paths are unaffected.
         String id = getIntent().getStringExtra("id");
+        String collection = getIntent().getStringExtra("collection");
+        if (collection == null) collection = "locations";
 
-        // Load the reminder from Firestore
+        boolean isShared = "sharedLocations".equals(collection);
+
+        // Load the location from whichever Firestore collection it lives in
         FirebaseFirestore.getInstance()
-                .collection("locations")
+                .collection(collection)
                 .document(id)
                 .get()
                 .addOnSuccessListener(doc -> {
                     loc = doc.toObject(StoredLocation.class);
                     if (loc != null) {
-                        showDetails();
+                        showDetails(isShared);
                     }
                 });
     }
 
-    private void showDetails() {
+    private void showDetails(boolean isShared) {
 
         TextView title = findViewById(R.id.titleText);
         TextView description = findViewById(R.id.descriptionText);
@@ -54,10 +59,17 @@ public class ViewLocationActivity extends AppCompatActivity {
             image.setImageURI(Uri.parse(loc.imageUri));
         }
 
-        // Button actions
-        edit.setOnClickListener(v -> editLocation());
-        delete.setOnClickListener(v -> deleteLocation());
-        share.setOnClickListener(v -> shareLocation());
+        if (isShared) {
+            // Shared locations are read-only — hide Edit and Delete
+            edit.setVisibility(android.view.View.GONE);
+            delete.setVisibility(android.view.View.GONE);
+            share.setText("Already Shared");
+            share.setEnabled(false);
+        } else {
+            edit.setOnClickListener(v -> editLocation());
+            delete.setOnClickListener(v -> deleteLocation());
+            share.setOnClickListener(v -> shareLocationToFirestore());
+        }
     }
 
     private void editLocation() {
@@ -76,16 +88,23 @@ public class ViewLocationActivity extends AppCompatActivity {
                 .addOnSuccessListener(a -> finish());
     }
 
-    private void shareLocation() {
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.setType("text/plain");
-
-        String text =
-                loc.locationName + "\n" +
-                        loc.description + "\n" +
-                        "Lat: " + loc.latitude + ", Lon: " + loc.longitude;
-
-        intent.putExtra(Intent.EXTRA_TEXT, text);
-        startActivity(Intent.createChooser(intent, "Share via"));
+    private void shareLocationToFirestore() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Share Location")
+                .setMessage("Share \"" + loc.locationName + "\" with all users?")
+                .setPositiveButton("Share", (d, i) ->
+                        FirebaseFirestore.getInstance()
+                                .collection("sharedLocations")
+                                .document(loc.id)
+                                .set(loc)
+                                .addOnSuccessListener(a ->
+                                        android.widget.Toast.makeText(this, "Location shared!", android.widget.Toast.LENGTH_SHORT).show()
+                                )
+                                .addOnFailureListener(e ->
+                                        android.widget.Toast.makeText(this, "Failed to share: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show()
+                                )
+                )
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 }

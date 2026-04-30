@@ -219,20 +219,20 @@ public class MyLocation extends AppCompatActivity {
                 .collection("locations")
                 .addSnapshotListener((value, error) -> {
 
-            if (error != null) {
-                Log.d("MyLocation", "Listener for changes on server not working");
-                return;
-            }
+                    if (error != null) {
+                        Log.d("MyLocation", "Listener for changes on server not working");
+                        return;
+                    }
 
-            storedLocations.clear();
+                    storedLocations.clear();
 
-            for (QueryDocumentSnapshot doc : value) {
-                StoredLocation location = doc.toObject(StoredLocation.class);
-                storedLocations.put(location.locationName, location);
-            }
+                    for (QueryDocumentSnapshot doc : value) {
+                        StoredLocation location = doc.toObject(StoredLocation.class);
+                        storedLocations.put(location.locationName, location);
+                    }
 
-            drawAllMarkers();
-        });
+                    drawAllMarkers();
+                });
 
         CollectionReference shared = db.collection("sharedLocations");
 
@@ -240,12 +240,16 @@ public class MyLocation extends AppCompatActivity {
 
             if (error != null) return;
 
+            // Remove any previously drawn shared markers before redrawing
+            mapView.getOverlays().removeIf(o -> o instanceof Marker);
+            drawAllMarkers(); // redraw personal locations first
+
             for (QueryDocumentSnapshot doc : value) {
                 StoredLocation sharedLoc = doc.toObject(StoredLocation.class);
-                storedLocations.put(sharedLoc.locationName, sharedLoc);
+                addMarker(sharedLoc, "sharedLocations");   // pass correct collection
             }
 
-            drawAllMarkers();
+            mapView.invalidate();
         });
     }
 
@@ -268,31 +272,36 @@ public class MyLocation extends AppCompatActivity {
 
         mapView.getOverlays().removeIf(o -> o instanceof Marker);
 
+        // Draw locations from personal collection
         for (StoredLocation storedLoc : storedLocations.values()) {
-
-            GeoPoint geoPoint = new GeoPoint(storedLoc.latitude, storedLoc.longitude);
-
-            Marker marker = new Marker(mapView);
-            marker.setPosition(geoPoint);
-            marker.setIcon(getDrawable(R.drawable.current_location));
-            marker.setTitle(storedLoc.locationName);
-            marker.setSubDescription(storedLoc.description);
-
-            marker.setOnMarkerClickListener((m, mapView) -> {
-                openLocationDetails(storedLoc);
-                return true;
-
-            });
-
-            mapView.getOverlays().add(marker);
+            addMarker(storedLoc, "locations");
         }
 
         mapView.invalidate();
     }
-    private void openLocationDetails(StoredLocation loc) {
+
+    private void addMarker(StoredLocation storedLoc, String collection) {
+
+        GeoPoint geoPoint = new GeoPoint(storedLoc.latitude, storedLoc.longitude);
+
+        Marker marker = new Marker(mapView);
+        marker.setPosition(geoPoint);
+        marker.setIcon(getDrawable(R.drawable.current_location));
+        marker.setTitle(storedLoc.locationName);
+        marker.setSubDescription(storedLoc.description);
+
+        marker.setOnMarkerClickListener((m, mapView) -> {
+            openLocationDetails(storedLoc, collection);
+            return true;
+        });
+
+        mapView.getOverlays().add(marker);
+    }
+    private void openLocationDetails(StoredLocation loc, String collection) {
 
         Intent intent = new Intent(MyLocation.this, ViewLocationActivity.class);
         intent.putExtra("id", loc.id);
+        intent.putExtra("collection", collection);   // tells ViewLocationActivity where to fetch from
         startActivity(intent);
     }
 
